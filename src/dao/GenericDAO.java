@@ -1,6 +1,7 @@
 package dao;
 
 import java.util.List;
+import util.CustomExceptions.RecordNotFoundException; // <--- NEW IMPORT
 
 /**
  * A generic interface defining the standard CRUD operations.
@@ -13,9 +14,10 @@ public interface GenericDAO<T> {
     /**
      * Finds an entity by its unique ID.
      * @param id The ID of the entity to find.
-     * @return The found entity, or null if not found.
+     * @return The found entity.
+     * @throws RecordNotFoundException if the record is not found. // <--- NEW DOCUMENTATION
      */
-    T findById(String id);
+    T findById(String id) throws RecordNotFoundException; // <--- MODIFIED: ADDED THROWS CLAUSE
 
     /**
      * Retrieves all entities of type T from the persistence store.

@@ -5,11 +5,15 @@ import service.ManagementService;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.util.List;
 import java.util.UUID;
 import java.io.IOException;
+import java.io.File;
+import java.text.NumberFormat;
+import java.util.Locale;
 
 /**
  * Panel dedicated to the management of Employee entities (CRUD UI).
@@ -17,20 +21,35 @@ import java.io.IOException;
  */
 public class EmployeePanel extends JPanel {
 
-    private final ManagementService managementService;
+    // Custom format for South African Rand (R)
+    private static final NumberFormat RAND_FORMATTER = NumberFormat.getCurrencyInstance(new Locale("en", "ZA")); //
+     private final ManagementService managementService;
+    private final MainFrame mainFrame; // <--- CRITICAL ADDITION: MainFrame reference
 
     // --- GUI Components (Form) ---
-    private JTextField idField, nameField, ageField, salaryField, jobTitleField;
+    private JTextField idField, nameField, ageField, salaryField;
+    private JComboBox<String> cbJobTitle;
     private JButton saveButton, deleteButton;
+    private JButton exportButton;
     private JTable employeeTable;
     private DefaultTableModel tableModel;
 
-    public EmployeePanel(ManagementService service) {
+    // --- Dropdown Data (New) ---
+    private static final String[] JOB_TITLES = {
+            "Analyst", "Senior Analyst", "Manager", "Director", "Executive", "Intern", "Other"
+    };
+
+    // MODIFIED CONSTRUCTOR: Now accepts MainFrame
+    public EmployeePanel(ManagementService service, MainFrame mainFrame) {
         this.managementService = service;
-        setLayout(new BorderLayout(10, 10)); // Outer layout
+        this.mainFrame = mainFrame; // <--- ASSIGNED HERE
+        setLayout(new BorderLayout(10, 10));
 
         initComponents();
-        loadEmployeeData(); // Load data when the panel initializes
+        loadEmployeeData();
+
+        //applyRoleBasedAccessControl();
+
     }
 
     private void initComponents() {
@@ -47,7 +66,7 @@ public class EmployeePanel extends JPanel {
     }
 
     // =========================================================
-    // UI Creation Methods
+    // UI Creation Methods (Unchanged)
     // =========================================================
 
     private JPanel createFormPanel() {
@@ -76,9 +95,9 @@ public class EmployeePanel extends JPanel {
         fieldsPanel.add(new JLabel("Salary:"));
         fieldsPanel.add(salaryField);
 
-        jobTitleField = new JTextField();
+        cbJobTitle = new JComboBox<>(JOB_TITLES);
         fieldsPanel.add(new JLabel("Job Title:"));
-        fieldsPanel.add(jobTitleField);
+        fieldsPanel.add(cbJobTitle);
 
         panel.add(fieldsPanel, BorderLayout.CENTER);
 
@@ -88,7 +107,8 @@ public class EmployeePanel extends JPanel {
         deleteButton = new JButton("Delete Selected Employee");
         JButton newButton = new JButton("New/Clear Form");
 
-        JButton exportButton = new JButton("Export Employees to JSON");
+        // Initialize the Export button for CSV
+        exportButton = new JButton("Export to CSV");
 
         buttonPanel.add(newButton);
         buttonPanel.add(exportButton);
@@ -101,7 +121,7 @@ public class EmployeePanel extends JPanel {
         newButton.addActionListener(e -> clearForm());
         deleteButton.setEnabled(false); // Disable delete until a row is selected
 
-        // --- NEW: Add Action Listener for Export ---
+        // Action Listener for Export
         exportButton.addActionListener(this::handleExportAction);
 
         return panel;
@@ -124,7 +144,12 @@ public class EmployeePanel extends JPanel {
         employeeTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && employeeTable.getSelectedRow() != -1) {
                 populateFormFromTable(employeeTable.getSelectedRow());
-                deleteButton.setEnabled(true);
+
+                // Only enable the delete button if the user has CRUD access
+                String role = managementService.getAuthService().getActiveUser().getRole();
+                boolean hasCrudAccess = role.equals("Admin") || role.equals("Manager") || role.equals("HR Specialist");
+
+                deleteButton.setEnabled(hasCrudAccess); // <-- RBAC CHECK APPLIED HERE
             }
         });
 
@@ -132,25 +157,31 @@ public class EmployeePanel extends JPanel {
     }
 
     // =========================================================
-    // Data Loading and Mapping Methods
+    // Data Loading and Mapping Methods (Unchanged)
     // =========================================================
 
-    private void loadEmployeeData() {
+    public void loadEmployeeData() {
         // Clear existing data
         tableModel.setRowCount(0);
 
-        // Get data from the Service layer (READ operation)
-        List<Employee> employees = managementService.getAllEmployees();
+        try { // <-- START Robustness: Try-catch for DAO call
+            // Get data from the Service layer (READ operation)
+            List<Employee> employees = managementService.getAllEmployees();
 
-        for (Employee emp : employees) {
-            Object[] row = new Object[]{
-                    emp.getId(),
-                    emp.getName(),
-                    emp.getAge(),
-                    String.format("%.2f", emp.getSalary()), // Format salary for display
-                    emp.getJobTitle()
-            };
-            tableModel.addRow(row);
+            for (Employee emp : employees) {
+                Object[] row = new Object[]{
+                        emp.getId(),
+                        emp.getName(),
+                        emp.getAge(),
+                        RAND_FORMATTER.format(emp.getSalary()), // Format salary for display
+                        emp.getJobTitle()
+                };
+                tableModel.addRow(row);
+            }
+            mainFrame.updateStatusBar("Employee table loaded successfully.", true); // <-- Status Bar Update (Success)
+
+        } catch (Exception ex) { // Catches DataAccessException or other exceptions
+            mainFrame.updateStatusBar("Error loading employee data: " + ex.getMessage(), false); // <-- Status Bar Update (Error)
         }
     }
 
@@ -158,20 +189,24 @@ public class EmployeePanel extends JPanel {
         idField.setText(tableModel.getValueAt(rowIndex, 0).toString());
         nameField.setText(tableModel.getValueAt(rowIndex, 1).toString());
         ageField.setText(tableModel.getValueAt(rowIndex, 2).toString());
-        // Salary will have a comma/format applied, so we might need to clean it up for editing,
-        // but for now, we'll use the raw value if possible.
-        salaryField.setText(tableModel.getValueAt(rowIndex, 3).toString().replace(",", ""));
-        jobTitleField.setText(tableModel.getValueAt(rowIndex, 4).toString());
-    }
+
+         String rawSalary = tableModel.getValueAt(rowIndex, 3).toString()
+                .replaceAll("[^\\d\\.,]", "") // Remove non-digit, non-decimal, non-comma characters
+                .replace(",", ""); // Remove thousands comma (assuming dot is decimal)
+
+        salaryField.setText(rawSalary);
+        cbJobTitle.setSelectedItem(tableModel.getValueAt(rowIndex, 4).toString());
+       }
 
     private void clearForm() {
         idField.setText("");
         nameField.setText("");
         ageField.setText("");
         salaryField.setText("");
-        jobTitleField.setText("");
+        cbJobTitle.setSelectedIndex(0);
         deleteButton.setEnabled(false);
         employeeTable.clearSelection();
+        mainFrame.resetStatusBar();
     }
 
     // =========================================================
@@ -187,13 +222,14 @@ public class EmployeePanel extends JPanel {
     }
 
     private void handleSaveAction(ActionEvent e) {
+        // NOTE: Keeping your original UUID generation, although typically database handles IDs.
         String id = idField.getText().isEmpty() ? UUID.randomUUID().toString() : idField.getText();
         String name = nameField.getText();
 
         try {
             int age = Integer.parseInt(ageField.getText());
             double salary = Double.parseDouble(salaryField.getText());
-            String jobTitle = jobTitleField.getText();
+            String jobTitle = (String) cbJobTitle.getSelectedItem();
 
             Employee employee = new Employee(id, name, age, salary, jobTitle);
 
@@ -209,6 +245,9 @@ public class EmployeePanel extends JPanel {
             clearForm();
             loadEmployeeData(); // Refresh the table
 
+            // CRITICAL FIX: Refresh the Dashboard after successful save/update
+            mainFrame.refreshMetricsDashboard();
+
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Invalid number format for Age or Salary.", "Input Error", JOptionPane.ERROR_MESSAGE);
         } catch (IllegalArgumentException ex) {
@@ -219,46 +258,63 @@ public class EmployeePanel extends JPanel {
 
     private void handleDeleteAction(ActionEvent e) {
         String idToDelete = idField.getText();
-        if (idToDelete.isEmpty()) return;
+        if (idToDelete.isEmpty()) {
+            mainFrame.updateStatusBar("Please select an employee from the table to delete.", false); // <-- Status Bar Error
+            return;
+        }
 
         int confirm = JOptionPane.showConfirmDialog(this,
                 "Are you sure you want to delete employee ID: " + idToDelete + "?",
                 "Confirm Delete", JOptionPane.YES_NO_OPTION);
 
         if (confirm == JOptionPane.YES_OPTION) {
-            boolean success = managementService.deleteEmployee(idToDelete);
-            if (success) {
-                JOptionPane.showMessageDialog(this, "Employee deleted successfully.", "Success", JOptionPane.INFORMATION_MESSAGE);
-                clearForm();
-                loadEmployeeData(); // Refresh the table
-            } else {
-                JOptionPane.showMessageDialog(this, "Failed to delete employee.", "Error", JOptionPane.ERROR_MESSAGE);
+            try { // Robustness: Try-catch for Delete operation
+                boolean success = managementService.deleteEmployee(idToDelete);
+                if (success) {
+                    mainFrame.updateStatusBar("Employee deleted successfully. ID: " + idToDelete, true); // <-- Status Bar Success
+                    clearForm();
+                    loadEmployeeData(); // Refresh the table
+
+                    mainFrame.refreshMetricsDashboard();
+                } else {
+                    mainFrame.updateStatusBar("Error: Failed to delete employee. ID not found or data access issue.", false); // <-- Status Bar Error
+                }
+            } catch (Exception ex) {
+                mainFrame.updateStatusBar("System Error during deletion: " + ex.getMessage(), false); // <-- Status Bar Error
             }
         }
     }
 
     // =========================================================
-    // Export Action Handler
+    // Export Action Handler (Unchanged)
     // =========================================================
 
     private void handleExportAction(ActionEvent e) {
         JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Specify file to save JSON export");
+        fileChooser.setDialogTitle("Export Employee Data to CSV");
 
-        // Suggest a default filename
-        fileChooser.setSelectedFile(new java.io.File("employees_export.json"));
+        // Set default filename and filter
+        fileChooser.setSelectedFile(new File("employees_export.csv"));
+        FileNameExtensionFilter filter = new FileNameExtensionFilter("CSV Files (*.csv)", "csv");
+        fileChooser.setFileFilter(filter);
 
         int userSelection = fileChooser.showSaveDialog(this);
 
         if (userSelection == JFileChooser.APPROVE_OPTION) {
-            java.io.File fileToSave = fileChooser.getSelectedFile();
+            File fileToSave = fileChooser.getSelectedFile();
+            String filePath = fileToSave.getAbsolutePath();
+
+            // Ensure .csv extension
+            if (!filePath.toLowerCase().endsWith(".csv")) {
+                filePath += ".csv";
+            }
 
             try {
-                // Call the Service Layer method to handle the export logic
-                managementService.exportEmployeesToJson(fileToSave.getAbsolutePath());
-
+                // Call the new CSV method
+                managementService.exportEmployeesToCsv(filePath);
+                mainFrame.updateStatusBar("Employee data successfully exported to: " + filePath, true);
                 JOptionPane.showMessageDialog(this,
-                        "Employee data successfully exported to:\n" + fileToSave.getAbsolutePath(),
+                        "Employee data successfully exported to:\n" + filePath,
                         "Export Successful", JOptionPane.INFORMATION_MESSAGE);
 
             } catch (IOException ex) {
@@ -268,5 +324,70 @@ public class EmployeePanel extends JPanel {
                 System.err.println("Export failed: " + ex.getMessage());
             }
         }
+    }
+    // =========================================================
+// RBAC Implementation (Fine-Grained Button Control)
+// =========================================================
+
+    /**
+     * Applies fine-grained control to the CRUD buttons based on the active user's role.
+     * Roles with CRUD access: Admin, Manager, HR Specialist
+     * Roles with Read-Only access: Data Analyst, Cust. Service Agent (though they shouldn't see this panel)
+     */
+    public void refreshAccessControls() {
+        // Check if a user is logged in before attempting to get the role
+        if (managementService.getAuthService().getActiveUser() == null) {
+            setCrudEnabled(false);
+            exportButton.setEnabled(false);
+            return;
+        }
+
+        // Retrieve the active user's role from the Authentication Service
+        String role = managementService.getAuthService().getActiveUser().getRole();
+
+        // Define which roles have CRUD privileges on EMPLOYEE data
+        boolean hasCrudAccess = role.equals("Admin") ||
+                role.equals("Manager") ||
+                role.equals("HR Specialist");
+
+        // Roles that only have Read access on this panel (but should see it)
+        boolean isReadOnly = role.equals("Data Analyst");
+
+        // Set state for the CRUD buttons and input fields
+        if (hasCrudAccess) {
+            // Full control
+            setCrudEnabled(true);
+            mainFrame.updateStatusBar("Employee Panel: CRUD mode enabled for " + role, true);
+        } else if (isReadOnly) {
+            // Read-Only mode
+            setCrudEnabled(false);
+            mainFrame.updateStatusBar("Employee Panel: Read-Only mode enabled for Data Analyst.", true);
+        } else {
+            // Any other role (e.g., Customer Service Agent) should ideally be blocked at the tab level,
+            // but if they somehow bypass the MainFrame, we set them to Read-Only as a fallback.
+            setCrudEnabled(false);
+            // NOTE: The tab logic in MainFrame should prevent Cust. Service Agent from seeing this tab.
+        }
+
+        // Data Analyst role is allowed to Export for reporting purposes
+        exportButton.setEnabled(role.equals("Admin") || role.equals("Manager") || role.equals("HR Specialist") || role.equals("Data Analyst"));
+    }
+
+    /**
+     * Helper method to enable or disable CRUD buttons and input fields.
+     */
+    private void setCrudEnabled(boolean enabled) {
+        saveButton.setEnabled(enabled);
+        deleteButton.setEnabled(false); // Always disable delete initially until selection is made
+
+        // Disable editing in the form fields
+        nameField.setEditable(enabled);
+        ageField.setEditable(enabled);
+        salaryField.setEditable(enabled);
+        cbJobTitle.setEnabled(enabled);
+
+        // Make the table non-editable for Read-Only roles
+        // We do this by toggling the DefaultTableModel's behavior or, more simply, the whole panel's appearance.
+        employeeTable.setEnabled(enabled);
     }
 }

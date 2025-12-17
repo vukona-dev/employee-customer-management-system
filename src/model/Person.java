@@ -4,6 +4,8 @@ package model;
  * Abstract base class for all people managed by the ECMS.
  * Demonstrates Encapsulation (private fields, public getters/setters)
  * and defines the basis for Polymorphism (abstract displayDetails method).
+ * * FIX: Added the public setId(String id) method to allow DAOs/Services
+ * to correctly re-assign the ID during object hydration and updates.
  */
 public abstract class Person {
 
@@ -20,17 +22,20 @@ public abstract class Person {
     }
 
     // --- Abstract Method (Polymorphism) ---
-    /**
-     * Forces subclasses (Employee, Customer) to implement their own way
-     * of displaying details, allowing for polymorphic behavior.
-     */
     public abstract String displayDetails();
 
     // --- Getters and Setters (Accessors and Mutators) ---
-    // Note: ID only has a getter, as it should not be changeable after creation.
 
     public String getId() {
         return id;
+    }
+
+    /**
+     * MUTATOR ADDED: Required by DAO layer to build objects from the database
+     * and by the Service layer for updates.
+     */
+    public void setId(String id) {
+        this.id = id;
     }
 
     public String getName() {
