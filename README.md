@@ -1,21 +1,21 @@
-# 🏢 ECMS: Employee & Customer Management System
+# ECMS: Employee & Customer Management System
 
-## 🌟 Overview
+## Overview
 
 The ECMS is a robust desktop application designed to streamline the management of internal employee records and external customer data. Built using **Java Swing** for the GUI and a **Service-Oriented Architecture (SOA)**, it features a secure, **Role-Based Access Control (RBAC)** system to ensure data integrity and separation of duties across five distinct user roles.
 
 ---
 
-## ✨ System Features
+## System Features
 
-### 🔐 Security & User Management
+### Security & User Management
 
 * **Role-Based Access Control (RBAC):** Access to tabs, CRUD operations (Create, Read, Update, Delete), and system tools is strictly enforced based on the logged-in user's role.
 * **Secure Authentication:** User passwords are automatically hashed using a secure algorithm upon registration and login.
 * **User Management Panel:** Dedicated panel (Admin only) for creating, viewing, and deleting system user accounts.
 * **Initial Admin Setup:** A default 'admin' user is automatically created upon first run (credentials configurable).
 
-### 📊 Data Management (CRUD Operations)
+### Data Management (CRUD Operations)
 
 * **Employee Management:** Full CRUD interface for maintaining employee records (Name, Age, Salary, Job Title).
     * **Financial Security:** Access to salary data and modification is restricted to appropriate roles (Admin, Manager, HR Specialist).
@@ -23,14 +23,14 @@ The ECMS is a robust desktop application designed to streamline the management o
     * **Data Integrity:** Includes validation to prevent the entry of future dates for the "Last Purchase Date."
 * **Data Refresh:** Dashboard metrics are automatically refreshed after any successful Employee or Customer save/delete operation.
 
-### 📈 Reporting & Utility (Visualization Only)
+### Reporting & Utility (Visualization Only)
 
 * **Analytics Panel:** Dedicated read-only area for viewing key performance indicators (KPIs) and data summaries using JFreeChart. 
 * **Modern UI:** Utilizes external libraries (`JCalendar`) for user-friendly date selection and features a clean, non-blocking status bar for user feedback.
 
 ---
 
-## 🖼️ Dashboard & Access Visualization (RBAC Focus)
+## Dashboard & Access Visualization (RBAC Focus)
 
 The dashboard uses the **Focused Quadrant Manager** design, which dynamically visualizes the user's precise access status for the core modules.
 
@@ -48,7 +48,7 @@ The HR Specialist role demonstrates the RBAC restrictions, showing **Full Access
 
 ---
 
-## 👥 Role-Based Access Control (RBAC) Policy
+## Role-Based Access Control (RBAC) Policy
 
 The system employs five distinct user roles, each with tightly defined permissions to ensure security and compliance.
 
@@ -62,7 +62,7 @@ The system employs five distinct user roles, each with tightly defined permissio
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -94,7 +94,7 @@ The system employs five distinct user roles, each with tightly defined permissio
 
 ---
 
-## 🔑 Initial Credentials
+## Initial Credentials
 
 Upon the very first launch, the system automatically creates a secure administrative account. Use these to test the core functionality:
 
@@ -108,7 +108,7 @@ Upon the very first launch, the system automatically creates a secure administra
 
 ---
 
-## 📦 Project Structure
+## Project Structure
 
 The project follows a standard Maven structure with a Service-Oriented Architecture:
 
